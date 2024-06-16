@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Yuppy Поиск</title>
+<meta charset="UTF-8"/>
+<style>
+#out {
+/* На маленьких экранах мы больше не используем направление строки, а используем столбец */
+	display:flex;
+	flex-direction:row;
+	flex-wrap:wrap;
+	justify-content:space-around;
+}
+
+@media all and (max-width: 400px) {
+  #out {
+    /* На маленьких экранах мы больше не используем направление строки, а используем столбец */
+    flex-direction: column;
+  }
+}
+</style>
+</head>
+<body style="background:#73F9CF;">
+
+<input type="text" value="котики" id='q' style="padding:10px;font-size:20pt;border-radius:7px;" onkeypress="if(event.keyCode==13)searchVideo(10);" size="32">
+&nbsp;
+<input type="submit" value="Найти" style="padding:10px;font-size:20pt;border-radius:7px;" onclick="searchVideo(10);">
+</center>
+
+<br>
+<div id="out">
+</div>
+<div id="out2">
+</div>
+<script>
+
+last_query = "";
+vote_array = Array();
+
+xhttp=new XMLHttpRequest();
+xhttp.timeout=2000;
+
+function searchVideo(k){
+	if(k==10)document.getElementById('out').innerHTML="&#128269;Ищем...";
+	var query = encodeURIComponent(document.getElementById('q').value);
+	last_query = query;
+	var sortf = encodeURIComponent(document.getElementById('sortf').value);
+	xhttp.onreadystatechange=function(){
+	  if(xhttp.readyState==4 && xhttp.status==200){
+		j=JSON.parse(xhttp.responseText);
+		if(j['error']!=undefined){
+			document.getElementById('out').innerHTML="<span style='color:red;'>"+j['error']+"</span>";
+			return;
+		}
+		var tmp="";
+		console.log(j);
+		for(var i=0;i<j['result'].length;i++){
+			tmp+='<div style="padding:5px;background:#83FaDF;border-radius:7px;width:280px;margin-bottom:30px;">';
+			tmp+='<video controls style="margin:5px;width:96%;" title="'+j['result'][i]['description']+'"><source src="'+j['result'][i]['url']+'" type="video/mp4" /></video>';
+			tmp+=j['result'][i]['description']+"<br>";
+			tmp+='<center><input type="submit" title="Релевантно" value="&#128077;" onclick="if(upvote(\''+j['result'][i]['url']+'\'))this.style.background=\'#afa\';" style="width:47%;font-size: large;padding: 3px;margin: 3px;">';
+			tmp+='<input type="submit" title="Не релевантно" value="&#128078;" onclick="if(downvote(\''+j['result'][i]['url']+'\'))this.style.background=\'#faa\';" style="width:47%;font-size: large;padding: 3px;margin: 3px;">';
+			tmp+='<br><input type="submit" value="Похожие" onclick="document.getElementById(\'q\').value=\''+j['result'][i]['url']+'\';searchVideo(10);" style="width:96.4%;font-size: large;padding: 3px;margin: 3px;"></center>';
+			tmp+='</div>';
+		}
+		document.getElementById('out').innerHTML=tmp;
+		tmp='<input type="submit" value="Ещё!" style="padding:10px;font-size:20pt;border-radius:7px;width:100%;flex-grow:5;" onclick="searchVideo('+(k+10)+')">';
+		tmp+="<br><span color='gray'>Execution time: "+j['time']+" ms</span><br>";
+		document.getElementById('out2').innerHTML=tmp;
+	  }
+	}
+	xhttp.open("POST",location.href+"searchVideo?sort="+sortf+"&k="+k+"&query="+query,true);
+	xhttp.send(vote_array);
+	vote_array = Array();
+}
+
+function upvote(url){
+	vote_array.push("+|>"+last_query+"|>"+url);
+	console.log("+|>"+last_query+"|>"+url);
+	return true;
+}
+
+function downvote(url){
+	vote_array.push("-|>"+last_query+"|>"+url);
+	console.log("-|>"+last_query+"|>"+url);
+	return true;
+}
+
+</script>
+</body>
+</html>
