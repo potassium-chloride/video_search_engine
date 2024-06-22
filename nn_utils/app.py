@@ -7,10 +7,6 @@ import torch
 
 app = Flask(__name__)
 
-@app.route("/")
-def hello():
-	return "Hello, World!"
-
 ############# GigaAM part
 
 print("Load GigaAM transcriber")
@@ -74,32 +70,6 @@ model.load_state_dict(ckpt, strict=False)
 model.eval()
 model = model.to(device)
 
-#import time
-#start_t = time.time()
-#print(model.transcribe(["./long_example.wav"])[0])
-#print("Inference time:",time.time()-start_t)
-
-@app.route("/transcribe", methods=['POST'])
-def transcribeFunction():
-	start_t = time.time()
-	data = request.data
-	if data is None or len(data)<4000:
-		res = dict()
-		res['text'] = ''
-		res['error'] = 'There is no file posted'
-		res['time'] = time.time()-start_t
-		return res
-	with tempfile.NamedTemporaryFile(suffix=".wav") as fl:
-		fl.write(data)
-		fl.flush()
-		txt = model.transcribe([fl.name])[0]
-		if type(txt)==list:
-			txt = txt[0]
-		res = dict()
-		res['text'] = txt
-		res['time'] = time.time()-start_t
-		return res
-
 ##################### TRANSLATOR PART
 
 enAlph = 'qwertyuiopasdfghjklzxcvbnm'
@@ -110,66 +80,11 @@ def isItEnglish(txt):
 	enScore = sum([i in txtl for i in enAlph])
 	return enScore>=ruScore
 
-#print("Load ru->en translator")
-#
-#
-#from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-#ruen_tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-ru-en")
-#ruen_model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-ru-en")
-#
-#from transformers import FSMTForConditionalGeneration, FSMTTokenizer
-#mname = "facebook/wmt19-ru-en"
-#ruen_tokenizer2 = FSMTTokenizer.from_pretrained(mname)
-#ruen_model2 = FSMTForConditionalGeneration.from_pretrained(mname)
-#
-#def ru2en(txt):
-#	input_ids = ruen_tokenizer.encode(txt.replace("ё","е").replace("Ё","Е"), return_tensors="pt")
-#	outputs = ruen_model.generate(input_ids)
-#	decoded = ruen_tokenizer.decode(outputs[0], skip_special_tokens=True)
-#	if len(decoded.replace(" ",""))==0 and len(txt.replace(" ",""))>0:
-#		print("ru2en: Не удалось выполнить перевод промпта: "+txt)
-#		return txt
-#	return decoded
-#
-#def ru2en_v2(txt):
-#	input_ids = ruen_tokenizer2.encode(txt.replace("ё","е").replace("Ё","Е"), return_tensors="pt")
-#	outputs = ruen_model2.generate(input_ids)
-#	decoded = ruen_tokenizer2.decode(outputs[0], skip_special_tokens=True)
-#	if len(decoded.replace(" ",""))==0 and len(txt.replace(" ",""))>0:
-#		print("ru2en: Не удалось выполнить перевод промпта: "+txt)
-#		return txt
-#	return decoded
-#
-#@app.route("/ru2en", methods=['GET','POST'])
-#def translateFunction():
-#	start_t = time.time()
-#	txt = request.args.get('text')
-#	res = dict()
-#	try:
-#		if isItEnglish(txt):
-#			res['text'] = txt # Nothing do
-#			res['text2'] = txt # Nothing do
-#			res['error'] = "Text already in English, nothing do"
-#		else:
-#			res['text'] = ru2en(txt)
-#			res['text2'] = ru2en_v2(txt)
-#	except Exception as e:
-#		res['text'] = ""
-#		res['error'] = str(e)
-#	res['time'] = time.time()-start_t
-#	return res
 
 ####################################### CLIP encoder
 
 print("Load CLIP model")
 from PIL import Image
-#from transformers import CLIPProcessor, CLIPModel
-
-#model_name = "openai/clip-vit-large-patch14" # dim=768
-#model_name = "openai/clip-vit-base-patch32" # dim=512
-
-#clip_model = CLIPModel.from_pretrained(model_name)
-#clip_processor = CLIPProcessor.from_pretrained(model_name)
 
 import ruclip
 clip_model, clip_processor = ruclip.load("ruclip-vit-base-patch32-384", device="cpu")
@@ -201,44 +116,15 @@ def text2vec(txt):
 def CLIP_text_encoder():
 	start_t = time.time()
 	txt = request.args.get('text')
-#	translator_id = int(request.args.get('translator',0))
 	res = dict()
 	try:
-#		if isItEnglish(txt):
-#			res['text'] = txt # Nothing do
-#		else:
-#			if translator_id==0:
-#				res['text'] = ru2en(txt)
-#			elif translator_id==1:
-#				res['text'] = ru2en_v2(txt)
-#			else:
-#				raise Exception("Translator not supported")
 		emb = text2vec(txt)
-#		emb = (emb/np.linalg.norm(emb))
 		res['embedding'] = emb.tolist()
 	except Exception as e:
 		res['embedding'] = []
 		res['error'] = str(e)
 	res['time'] = time.time()-start_t
 	return res
-
-@app.route("/clip_img_encode", methods=['POST'])
-def CLIP_img_encoder():
-	start_t = time.time()
-	data = request.data
-	if data is None or len(data)<100:
-		res = dict()
-		res['error'] = 'There is no file posted'
-		res['time'] = time.time()-start_t
-		return res
-	with tempfile.NamedTemporaryFile(suffix=".jpg") as fl:
-		fl.write(data)
-		fl.flush()
-		emb = img2vec(fl.name)['clip']
-		res = dict()
-		res['embedding'] = emb.tolist()
-		res['time'] = time.time()-start_t
-		return res
 
 # doc2vec encoding
 
@@ -291,7 +177,10 @@ def opencvFrame2embedding(image):
 	image = Image.fromarray(image) # -> PILlow
 	return img2vec(image)['clip'].tolist() # -> Embedding
 
-stop_words = ["поставь лайк этому ролику и подпишись на канал",
+stop_words = [
+			"подписывайся поудобнее",
+			"подписывайся поудобней",
+			"поставь лайк этому ролику и подпишись на канал",
 			"поставь лайк этому видео и подпишись на канал",
 			"поставь лайк этому ролику и подпишись на меня",
 			"поставь лайк этому видео и подпишись на меня",
@@ -437,4 +326,4 @@ def video2vec_handle():
 	return res
 
 if __name__ == "__main__":
-	app.run(host='127.0.0.1',debug=False,port=6000)
+	app.run(host='127.0.0.1',debug=False,port=6000,use_reloader=False)
