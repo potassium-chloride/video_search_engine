@@ -81,9 +81,6 @@ def getCoefsByPrompt_doc(query):
 		coefs = sorter_model_doc(enc)
 		return coefs.numpy()[0]
 
-print("котики ->",getCoefsByPrompt_doc("котики"))
-print("как правильно писать розлив или разлив ->",getCoefsByPrompt_doc("как правильно писать розлив или разлив"))
-
 pca_M_clip = np.loadtxt("models/pca_M_clip.dat")
 pca_mu_clip = np.loadtxt("models/pca_mu_clip.dat")
 
@@ -118,7 +115,11 @@ def addVideo():
 	description = request.args.get('description',"")
 	stride = int(request.args.get('stride',5))
 	K = int(request.args.get('K',5))
-	force = bool(request.args.get('K',False))
+	force = bool(request.args.get('force',False))
+	if url == "":
+		post_data = request.get_json()
+		url = post_data['url']
+		description = post_data['description']
 	res = dict()
 	if not force and url in all_urls:
 		res['result'] = 'fail'
@@ -143,10 +144,8 @@ def addVideo():
 	return res
 
 def preprocessVideoForQuery(iVideo,clip_emb,doc_emb,doc_lemmed,doc_words):
-	# 2) Preprocess query
-	# clip_emb = text2vec(query.replace("#",""))
-	# doc_enc = doc2vec(query)
-	# 3) Feature extracting
+	# 1) Preprocess query
+	# 2) Feature extracting
 	features = []
 	clip_innerprod = iVideo['clip_embeddings'].dot(clip_emb)
 	features.append(clip_innerprod.min())
@@ -158,7 +157,7 @@ def preprocessVideoForQuery(iVideo,clip_emb,doc_emb,doc_lemmed,doc_words):
 	doc_innerprod2 = iVideo['transcription_embedding'].dot(doc_emb)
 	features.append(doc_innerprod2)
 	features.append(max(features))
-	# 3.2) Words calculating
+	# 2.2) Words calculating
 	description_words = set(iVideo['description'].lower().split(" "))
 	description_words_comp = len(description_words & doc_words) / max(len(doc_words),1)
 	features.append(description_words_comp)
@@ -222,7 +221,7 @@ def searchVideoHandle():
 	prompt = request.args.get('query')
 	k = int(request.args.get('k',10))
 	try:
-		learn_data = request.get_data(as_text=True)#.data.decode('utf-8')
+		learn_data = request.get_data(as_text=True)
 		print("data:",learn_data)
 		if learn_data is not None and len(learn_data)>5:
 			learn_data = learn_data.split(",")
@@ -238,7 +237,6 @@ def searchVideoHandle():
 		res['prompt_coeffs'] = prompt_coeffs
 	except Exception as e:
 		print(e)
-		raise e
 		res['result'] = {}
 		res['error'] = str(e)
 	res['all_videos'] = len(dict_store)
@@ -246,4 +244,4 @@ def searchVideoHandle():
 	return res
 
 if __name__ == "__main__":
-	app.run(host='127.0.0.1',debug=False,port=6001)
+	app.run(host='127.0.0.1',debug=False,port=6001,use_reloader=False)
