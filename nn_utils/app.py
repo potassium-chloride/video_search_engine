@@ -8,6 +8,8 @@ import torch
 app = Flask(__name__)
 
 ############# GigaAM part
+# GigaAM-RNNT -- лучшая модель для распознавания речи из аудио на русском языке по метрикам и личному опыту
+# Ближайший конкурент -- Whisper Large, который понимает больше языков, но галлюцинирует
 
 print("Load GigaAM transcriber")
 
@@ -62,15 +64,15 @@ class AudioToMelSpectrogramPreprocessor(NeMoAudioToMelSpectrogramPreprocessor):
 			)
 		)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu" # Использовать CUDA, если это возможно
 
-model = EncDecRNNTBPEModel.from_config_file("./rnnt_model_config.yaml")
+model = EncDecRNNTBPEModel.from_config_file("./rnnt_model_config.yaml") # Модели скачиваются отдельно с помощью downloader.sh
 ckpt = torch.load("./rnnt_model_weights.ckpt", map_location="cpu")
 model.load_state_dict(ckpt, strict=False)
 model.eval()
 model = model.to(device)
 
-##################### TRANSLATOR PART
+# Простой способ определить язык текста
 
 enAlph = 'qwertyuiopasdfghjklzxcvbnm'
 ruAlph = 'йцукенгшщзхъфывапролджэячсмитьбю'
@@ -82,15 +84,21 @@ def isItEnglish(txt):
 
 
 ####################################### CLIP encoder
+# Используется реализация CLIP на русском языке от Сбера.
 
 print("Load CLIP model")
 from PIL import Image
 
 import ruclip
-clip_model, clip_processor = ruclip.load("ruclip-vit-base-patch32-384", device="cpu")
-clip_predictor = ruclip.Predictor(clip_model, clip_processor, device="cpu", bs=8,quiet=True)
+clip_model, clip_processor = ruclip.load("ruclip-vit-base-patch32-384", device="cpu") # Latent dim 512. Возможно, стоит взять побольше?
+clip_predictor = ruclip.Predictor(clip_model, clip_processor, device="cpu", bs=8, quiet=True)
 
 def img2vec(img):
+	'''
+	Выполняет преобразование изображения в 512-мерное пространство.
+	Вход: URL изображения, путь на диске или PIL изображение.
+	Выход: отнормированный на 1 одномерный NumPy массив
+	'''
 	if type(img)==str:
 		if img.startswith('http'):
 			img = Image.open(requests.get(img, stream=True).raw)
@@ -106,6 +114,11 @@ def img2vec(img):
 	return res
 
 def text2vec(txt):
+	'''
+	Выполняет преобразование изображения в 512-мерное пространство с помощью CLIP.
+	Вход: текстовая строка
+	Выход: Выход: отнормированный на 1 одномерный NumPy массив
+	'''
 	if len(txt)<2: # Пустой запрос
 		print("Пустой промпт")
 		return np.zeros(512)
@@ -130,11 +143,19 @@ def CLIP_text_encoder():
 
 print("doc2vec encoding")
 
+# Модуль для лемматизации.
+# PyMorphy не учитывает соседние слова и контекст, но Mystem от Яндекса тоже не безгрешен
+# В рамках хакатона я не хочу усложнять этот этап обработки текста
 import pymorphy3
 
 morph = pymorphy3.MorphAnalyzer()
 
 def getStartForm(w):
+	'''
+	Получить вероятную начальную форму слова
+	Вход: строка (например, "рамы")
+	Выход: строка (например, "рама")
+	'''
 	try:
 		return morph.parse(w)[0].normal_form
 	except:
@@ -143,6 +164,9 @@ def getStartForm(w):
 
 from sentence_transformers import SentenceTransformer
 docvec_model = SentenceTransformer('cointegrated/LaBSE-en-ru')
+# Урезанная до русского и английского языков модель энкодера текста в 768 латентное пространство
+# На мой взгляд оптимальное соотношение между скоростью и качеством. Рейтинг моделей: https://github.com/avidale/encodechka
+# Ручка API возвращает не только отнормированный на 1 вектор, но и массив лемматизированных слов
 
 @app.route("/doc2vec", methods=['GET','POST'])
 def doc2vec_handle():
@@ -173,10 +197,16 @@ import cv2
 import numpy as np
 
 def opencvFrame2embedding(image):
+	'''
+ 	Переводит кадр из видео от OpenCV в вектор CLIP
+	Вход: NumPy массив в BGR цветах (по умолчанию для OpenCV)
+	Выход: список из 512 чисел
+	'''
 	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # -> np RGB
 	image = Image.fromarray(image) # -> PILlow
 	return img2vec(image)['clip'].tolist() # -> Embedding
 
+# Список фраз, которые удаляются из транскрипции видео
 stop_words = [
 			"подписывайся поудобнее",
 			"подписывайся поудобней",
@@ -220,9 +250,15 @@ stop_words = [
 			"ставь лайк"
 		]
 
+# "жадный" порядок замены
 stop_words.sort(key=lambda x:-len(x))
 
 def getBaseIndices(clusters):
+	'''
+	Получает список номеров опорных кадров по списку кластеров, к которым относятся все кадры
+	Вход: список из номеров кластеров, к которым принадлежит каждый кадр
+	Выход: список номеров рекомендуемых кадров для сохранения в БД
+	'''
 	classes = {i:[] for i in set(clusters)}
 	for i,val in enumerate(clusters):
 		if i==0:
@@ -240,6 +276,11 @@ def getBaseIndices(clusters):
 	return best_inds
 
 def descriptionFilter(description,thres=5):
+	'''
+	Грубая зачистка мусорных хештегов:
+	Вход: строка
+	Выход: строка
+	'''
 	tmp = description.count("#втоп")+description.count("#врекомендации")
 	tmp += description.count("#boobs")+description.count("#bigass")+description.count("#pussy")+description.count("#ass")
 	if description.count("#")>thres:
@@ -247,6 +288,14 @@ def descriptionFilter(description,thres=5):
 	return description
 
 def video2dict(videopath,description="",stride=5,K=5):
+	'''
+	Превращает пару видео+описание в словарь свойств видео для добавления в индекс
+	Входы:
+	videopath -- url или путь на диске до видеофайла с расширением mp4
+	description -- описание видео, по умолчанию пустая строка
+	stride -- шаг, с которым исследуются кадры, по умолчанию 5. Уменьшение обычно приводит к увеличению времени обработки без существенного увеличения качества
+	K -- число опорных кадров, которые следует сохранить в индекс, по умолчанию 5. Увеличьте, если известно, что в видео есть много разных сцен
+	'''
 	tmpfl = None
 	result = dict()
 	if videopath.startswith("http"):
@@ -275,7 +324,9 @@ def video2dict(videopath,description="",stride=5,K=5):
 		result['transcription'] = ""
 		result['transcription_lemmed'] = []
 		result['transcription_embedding'] = np.zeros(768)
-		os.remove(videopath+".wav")
+		try:
+			os.remove(videopath+".wav")
+		except:pass # бывают битые видео без аудиодорожки
 	result['description_orig'] = description
 	result['description'] = descriptionFilter(description,thres=6)
 	result['description_lemmed'] = result['description'].replace(","," ").replace("  "," ").replace("  "," ").replace("  "," ")
@@ -295,10 +346,13 @@ def video2dict(videopath,description="",stride=5,K=5):
 	print(count,"frames")
 	# Image processing: find keyframes
 	frames = np.array(frames)
-	kmodel = KMeans(n_clusters=K)
-	kmodel.fit(frames)
-	clusters = kmodel.predict(frames)
-	keyframes_inds = getBaseIndices(clusters)
+	try:
+		kmodel = KMeans(n_clusters=K)
+		kmodel.fit(frames)
+		clusters = kmodel.predict(frames)
+		keyframes_inds = getBaseIndices(clusters)
+	except: # Бывают битые видео, которые на самом деле не видео, а картинка
+		keyframes_inds = [0]
 	result['keyframes'] = [i*stride for i in keyframes_inds]
 	result['clip_embeddings'] = frames[keyframes_inds]
 	vidcap.release()
