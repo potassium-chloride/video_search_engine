@@ -4,17 +4,16 @@
 # Установка
 1) Склонируйте репозиторий, перейдите в папку и запустите скрипт настройки install.sh. После этого активируйте виртуальное окружение:
   ```
-     git clone https://github.com/potassium-chloride/video_search_engine/
-     cd ./video_search_engine/
-     bash ./install.sh
-     source .venv/bin/activate
+  git clone https://github.com/potassium-chloride/video_search_engine/
+  cd ./video_search_engine/
+  bash ./install.sh
+  source .venv/bin/activate
   ```
-
 2) Перед первым запуском необходимо скачать веса модели [GigaAM-RNNT](https://github.com/salute-developers/GigaAM):
-   ```
-   cd nn_utils
-   bash downloader.sh
-   ```
+  ```
+  cd nn_utils
+  bash downloader.sh
+  ```
 # Запуск
 1) Запуск бекенд-сервера с тяжёлыми нейросетями:
    ```
