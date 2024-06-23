@@ -3,7 +3,8 @@
 
 # Установка
 1) Склонируйте репозиторий, перейдите в папку и запустите скрипт настройки install.sh. После этого активируйте виртуальное окружение:
-  ```git clone https://github.com/potassium-chloride/video_search_engine/
+  ```
+     git clone https://github.com/potassium-chloride/video_search_engine/
      cd ./video_search_engine/
      bash ./install.sh
      source .venv/bin/activate
