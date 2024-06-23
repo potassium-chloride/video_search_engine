@@ -2,21 +2,12 @@
 Поисковый движок коротких видеоклипов (до 1 минуты) нацеленный на русскоязычную аудиторию
 
 # Установка
-1) Настоятельно рекомендуется завести виртуальное окружение:
+1) Настоятельно рекомендуется завести виртуальное окружение и установить зависимости:
   ```
-  conda create -n videoSearch python==3.10 pip
-  conda activate videoSearch
-  ```
-  Или
-  ```
-  python3 -m virtualenv .venv
+  bash install.sh
   source .venv/bin/activate
   ```
-2) Установка зависимостей:
-   ```
-   pip install -r requirements.txt
-   ```
-   Также необходимо скачать веса модели [GigaAM-RNNT](https://github.com/salute-developers/GigaAM):
+2) Скачать веса модели [GigaAM-RNNT](https://github.com/salute-developers/GigaAM):
    ```
    cd nn_utils
    bash downloader.sh
@@ -27,6 +18,7 @@
    cd nn_utils
    python3 app.py
    ```
+   При первом запуске скрипт скачает также веса CLIP и doc2vec моделей, это может занять некоторое время
 2) Запуск фронтенд-сервера непосредственно с поиском и индексацией видео:
    ```
    cd frontend
